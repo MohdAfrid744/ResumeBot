@@ -7,13 +7,16 @@ from utils.prompt import SYSTEM_PROMPT
 from utils.logger import logger
 from utils.cache import get_cached_response, set_cached_response
 
-load_dotenv()
-
-# Initialize Gemini client
-# The SDK automatically uses GEMINI_API_KEY from environment variables
-client = genai.Client()
-
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
+def _get_client_and_model():
+    """
+    Force reload the .env file and return a fresh genai.Client and the model name.
+    This ensures that edits to the .env file are applied instantly without restarting Streamlit.
+    """
+    load_dotenv(override=True)
+    model = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
+    api_key = os.environ.get("GEMINI_API_KEY")
+    client = genai.Client(api_key=api_key)
+    return client, model
 
 
 def get_response(conversation_history: list[dict]) -> str:
@@ -24,6 +27,8 @@ def get_response(conversation_history: list[dict]) -> str:
     cached = get_cached_response(conversation_history)
     if cached is not None:
         return cached
+
+    client, model = _get_client_and_model()
 
     # Map conversation history roles from 'assistant' to Gemini's expected 'model' role
     contents = []
@@ -36,12 +41,12 @@ def get_response(conversation_history: list[dict]) -> str:
             )
         )
 
-    logger.info(f"LLM request | model={MODEL} | context={len(conversation_history)} msgs")
+    logger.info(f"LLM request | model={model} | context={len(conversation_history)} msgs")
 
     start = time.time()
     try:
         response = client.models.generate_content(
-            model=MODEL,
+            model=model,
             contents=contents,
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
@@ -73,6 +78,8 @@ def get_response_stream(conversation_history: list[dict]):
         yield cached
         return
 
+    client, model = _get_client_and_model()
+
     # Map conversation history roles from 'assistant' to Gemini's expected 'model' role
     contents = []
     for msg in conversation_history:
@@ -84,13 +91,13 @@ def get_response_stream(conversation_history: list[dict]):
             )
         )
 
-    logger.info(f"Streaming LLM request | model={MODEL} | context={len(conversation_history)} msgs")
+    logger.info(f"Streaming LLM request | model={model} | context={len(conversation_history)} msgs")
 
     start = time.time()
     full_reply = ""
     try:
         response_stream = client.models.generate_content_stream(
-            model=MODEL,
+            model=model,
             contents=contents,
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
@@ -133,10 +140,12 @@ def transcribe_audio(audio_bytes: bytes, filename: str = "audio.webm") -> str:
     elif filename.endswith(".m4a"):
         mime_type = "audio/m4a"
 
+    client, model = _get_client_and_model()
+
     try:
         start = time.time()
         response = client.models.generate_content(
-            model=MODEL,
+            model=model,
             contents=[
                 types.Part.from_bytes(
                     data=audio_bytes,
