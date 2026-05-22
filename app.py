@@ -356,7 +356,7 @@ for col, s in zip([c1, c2], SUGGESTIONS[3:]):
 st.markdown('<hr class="thin-hr">', unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-# Voice input — st.audio_input + Gemini Multimodal Audio
+# Voice input — st.audio_input + Groq Whisper Audio
 # ─────────────────────────────────────────────
 audio_value = st.audio_input(
     "🎙️ Record your question — click the mic, speak, then click stop",

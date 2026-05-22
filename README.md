@@ -41,7 +41,7 @@ Voicebot/
 └── utils/
     ├── __init__.py
     ├── prompt.py           # Combined system prompt (resume + Q&A reference guide)
-    ├── llm.py              # Google GenAI client (Gemini generation & transcription)
+    ├── llm.py              # Groq client (Llama generation & Whisper transcription)
     ├── tts.py              # Sentence-splitting Edge-TTS concurrent synthesis engine
     ├── cache.py            # API cache load/write/clear utilities
     └── logger.py           # Logger configuration
