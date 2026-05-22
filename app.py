@@ -49,9 +49,15 @@ def _play_tts(text: str):
 """, height=0)
 
 
-def _render_audio_player(audio_bytes: bytes, player_id: str) -> None:
+def _render_audio_player(audio_bytes: bytes, player_id: str, autoplay: bool = False) -> None:
     """Embed a compact styled play/pause + restart audio player inside a chat bubble."""
     b64 = base64.b64encode(audio_bytes).decode()
+    auto_play_js = """
+  setTimeout(() => {
+    a.play().catch(e => console.warn('Autoplay blocked:', e));
+  }, 150);
+""" if autoplay else ""
+
     components.html(f"""
 <style>
 body{{margin:0;padding:2px 0;background:transparent;font-family:Inter,sans-serif;overflow:hidden;}}
@@ -93,6 +99,7 @@ body{{margin:0;padding:2px 0;background:transparent;font-family:Inter,sans-serif
     td.textContent=fmt(a.currentTime)+' / '+fmt(a.duration);
   }};
   sk.oninput=()=>{{a.currentTime=sk.value/100*a.duration;}};
+  {auto_play_js}
 }})();
 </script>
 """, height=54)
@@ -115,17 +122,17 @@ def handle_query(user_query: str, source: str):
     st.session_state.messages.append({"role": "assistant", "content": reply})
 
     # Generate TTS once and cache by message index.
-    # Stored in auto_tts_bytes for auto-play after rerun,
+    # Stored in auto_tts_id for auto-play via the inline player after rerun,
     # and in tts_cache[msg_idx] so the player can replay from memory.
     msg_idx = len(st.session_state.messages) - 1
     with st.spinner("Preparing voice…"):
         audio_bytes = generate_tts_audio(reply)
     st.session_state.tts_cache[msg_idx] = audio_bytes  # may be None
     if audio_bytes:
-        st.session_state.auto_tts_bytes    = audio_bytes
+        st.session_state.auto_tts_id       = msg_idx
         st.session_state.auto_tts_fallback = None
     else:
-        st.session_state.auto_tts_bytes    = None
+        st.session_state.auto_tts_id       = None
         st.session_state.auto_tts_fallback = reply
 
 # ─────────────────────────────────────────────
@@ -279,8 +286,8 @@ if "last_audio_hash" not in st.session_state:
 if "replay_text" not in st.session_state:
     st.session_state.replay_text = None    # text to re-speak on next render
 
-if "auto_tts_bytes" not in st.session_state:
-    st.session_state.auto_tts_bytes = None    # MP3 bytes queued for next stable render
+if "auto_tts_id" not in st.session_state:
+    st.session_state.auto_tts_id = None    # msg index to auto-play after rerun
 
 if "auto_tts_fallback" not in st.session_state:
     st.session_state.auto_tts_fallback = None  # fallback text for browser TTS
@@ -307,7 +314,7 @@ with _c2:
     if st.button("🗑️", key="clear_chat", help="Clear conversation"):
         st.session_state.messages       = []
         st.session_state.tts_cache      = {}
-        st.session_state.auto_tts_bytes    = None
+        st.session_state.auto_tts_id       = None
         st.session_state.auto_tts_fallback = None
         st.session_state.pending_input  = None
         st.session_state.last_audio_hash   = None
@@ -320,7 +327,7 @@ with _c3:
         clear_tts_cache()
         st.session_state.messages       = []
         st.session_state.tts_cache      = {}
-        st.session_state.auto_tts_bytes    = None
+        st.session_state.auto_tts_id       = None
         st.session_state.auto_tts_fallback = None
         st.session_state.pending_input  = None
         st.session_state.last_audio_hash   = None
@@ -395,7 +402,10 @@ for i, msg in enumerate(st.session_state.messages):
         if msg["role"] == "assistant":
             cached_audio = st.session_state.tts_cache.get(i)
             if cached_audio:
-                _render_audio_player(cached_audio, player_id=str(i))
+                should_autoplay = (st.session_state.auto_tts_id == i)
+                _render_audio_player(cached_audio, player_id=str(i), autoplay=should_autoplay)
+                if should_autoplay:
+                    st.session_state.auto_tts_id = None
             else:
                 _, btn_col = st.columns([7, 3])
                 with btn_col:
@@ -405,27 +415,16 @@ for i, msg in enumerate(st.session_state.messages):
                             audio_bytes = generate_tts_audio(msg["content"])
                         if audio_bytes:
                             st.session_state.tts_cache[i] = audio_bytes
-                            st.session_state.auto_tts_bytes = audio_bytes
+                            st.session_state.auto_tts_id = i
                             st.session_state.auto_tts_fallback = None
                             st.rerun()
                         else:
                             st.error("Failed to generate voice. Please check logs.")
 
 # ─────────────────────────────────────────────
-# Auto-TTS: play queued audio from previous query (stable render, no rerun)
+# Auto-TTS Fallback: play queued fallback browser speech synthesis if needed
 # ─────────────────────────────────────────────
-if st.session_state.auto_tts_bytes:
-    _b64 = base64.b64encode(st.session_state.auto_tts_bytes).decode()
-    st.session_state.auto_tts_bytes = None
-    components.html(f"""
-<script>
-(function() {{
-  const audio = new Audio('data:audio/mp3;base64,{_b64}');
-  audio.play().catch(e => console.warn('Autoplay blocked:', e));
-}})();
-</script>
-""", height=0)
-elif st.session_state.auto_tts_fallback:
+if st.session_state.auto_tts_fallback:
     _txt  = st.session_state.auto_tts_fallback
     _safe = _txt.replace("\\", "\\\\").replace("`", "\\`").replace("$", "\\$")
     st.session_state.auto_tts_fallback = None
