@@ -58,7 +58,10 @@ def get_response(conversation_history: list[dict]) -> str:
     except Exception as e:
         elapsed = time.time() - start
         logger.error(f"LLM error after {elapsed:.2f}s: {e}")
-        return f"[Error reaching AI: {e}]"
+        error_msg = str(e)
+        if "503" in error_msg or "UNAVAILABLE" in error_msg or "high demand" in error_msg.lower():
+            return "The AI service is currently experiencing high demand. Please try again in a moment."
+        return "Sorry, I am having trouble connecting to the AI service right now. Please try again."
 
 
 def get_response_stream(conversation_history: list[dict]):
@@ -112,7 +115,11 @@ def get_response_stream(conversation_history: list[dict]):
     except Exception as e:
         elapsed = time.time() - start
         logger.error(f"Streaming error after {elapsed:.2f}s: {e}")
-        yield f"[Error reaching AI: {e}]"
+        error_msg = str(e)
+        if "503" in error_msg or "UNAVAILABLE" in error_msg or "high demand" in error_msg.lower():
+            yield "The AI service is currently experiencing high demand. Please try again in a moment."
+        else:
+            yield "Sorry, I am having trouble connecting to the AI service right now. Please try again."
 
 
 def transcribe_audio(audio_bytes: bytes, filename: str = "audio.webm") -> str:
