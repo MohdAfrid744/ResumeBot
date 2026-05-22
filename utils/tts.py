@@ -44,8 +44,8 @@ def generate_tts_audio(text: str) -> bytes | None:
         import edge_tts
 
         async def _generate_with_retry() -> bytes:
-            # If text is short, handle it in one request to minimize connections
-            if len(text) < 400:
+            # If text is short/medium, handle it in one request to minimize connections
+            if len(text) < 1000:
                 sentences = [text]
             else:
                 # Split text by sentence boundaries (periods, question marks, exclamation marks)
@@ -57,11 +57,18 @@ def generate_tts_audio(text: str) -> bytes | None:
 
             async def fetch_sentence_tts(sentence: str) -> bytes:
                 max_retries = 3
-                timeout_per_try = 12.0
+                timeout_per_try = 30.0
                 for attempt in range(max_retries):
                     try:
                         logger.info(f"edge-tts fetching sentence ({len(sentence)} chars), attempt {attempt + 1}/{max_retries}...")
-                        communicate = edge_tts.Communicate(sentence, ACTIVE_VOICE, rate="+5%", pitch="+0Hz")
+                        communicate = edge_tts.Communicate(
+                            sentence, 
+                            ACTIVE_VOICE, 
+                            rate="+5%", 
+                            pitch="+0Hz",
+                            connect_timeout=30,
+                            receive_timeout=60
+                        )
                         chunks: list[bytes] = []
                         async def stream_collect():
                             async for chunk in communicate.stream():
@@ -76,7 +83,7 @@ def generate_tts_audio(text: str) -> bytes | None:
                         logger.warning(f"edge-tts attempt {attempt + 1} failed for: '{sentence[:30]}...': {ex}")
                         if attempt == max_retries - 1:
                             raise ex
-                        await asyncio.sleep(0.5)
+                        await asyncio.sleep(1.0)
                 raise Exception("Failed to generate TTS for sentence.")
 
             # Sequentially fetch sentences to prevent concurrent connection rate limits / resets
@@ -89,7 +96,7 @@ def generate_tts_audio(text: str) -> bytes | None:
         # Run async in a separate thread so we don't conflict with Streamlit's event loop
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
             future = pool.submit(asyncio.run, _generate_with_retry())
-            audio_bytes = future.result(timeout=45)
+            audio_bytes = future.result(timeout=60)
 
         if audio_bytes:
             # Save generated audio to local disk cache
