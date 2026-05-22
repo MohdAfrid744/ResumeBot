@@ -4,7 +4,7 @@ import base64
 import hashlib
 import uuid
 
-from utils.llm import get_response_stream, transcribe_audio
+from utils.llm import get_response_stream, transcribe_audio, get_active_provider_name
 from utils.tts import generate_tts_audio
 from utils.logger import logger
 from utils.cache import clear_api_cache
@@ -459,8 +459,8 @@ if user_input := st.chat_input("Type your question or record with the mic above�
 # ─────────────────────────────────────────────
 # Footer
 # ─────────────────────────────────────────────
-st.markdown("""
+st.markdown(f"""
 <div class="footer">
-  Built for 100x · Powered by Google Gemini (Gemini 1.5 Flash) · edge-tts · Mohd Afrid © 2026
+  Built for 100x · Powered by {get_active_provider_name()} · edge-tts · Mohd Afrid © 2026
 </div>
 """, unsafe_allow_html=True)

@@ -1,6 +1,6 @@
 # 🎙️ Afrid | Interactive Resume Voicebot
 
-An interactive, high-fidelity portfolio voicebot for **Mohd Afrid** (AI/ML Engineer). Built using **Streamlit**, **Google Gemini (Gemini 1.5 Flash)** for reasoning & native multimodal audio transcription, and **Microsoft Edge Neural TTS (`edge-tts`)** for conversational voice outputs.
+An interactive, high-fidelity portfolio voicebot for **Mohd Afrid** (AI/ML Engineer). Built using **Streamlit**, **Groq (Llama 3.3)** for reasoning & Whisper-large-v3-turbo transcription, and **Microsoft Edge Neural TTS (`edge-tts`)** for conversational voice outputs.
 
 The system is specifically designed to run on a **Free API tier**, implementing advanced local caching and concurrent network optimizations to remain highly responsive and budget-friendly.
 
@@ -9,7 +9,7 @@ The system is specifically designed to run on a **Free API tier**, implementing 
 ## 🌟 Key Features
 
 *   **💬 Multimodal Conversational Interface:** Type questions or record audio directly through the UI.
-*   **🎙️ Native Audio Transcription:** Utilizes Gemini's multimodal understanding to transcribe user recordings directly without requiring a separate Whisper model.
+*   **🎙️ Audio Transcription:** Utilizes Groq's fast Whisper-large-v3-turbo endpoint to transcribe user recordings directly.
 *   **⚡ Concurrent Neural Speech Synthesis:** Splits generated paragraphs into sentences and requests audio tracks concurrently from Microsoft's Edge TTS API. This results in **4x faster voice prep times (under 4s)**, bypassing WebSocket timeouts.
 *   **🎛️ Premium Custom Audio Player:** Integrates a styled, dark-themed HTML/JS play-pause-seek slider bubble directly in each chat turn.
 *   **🔄 Hybrid Speech Fallback:** If Microsoft's public TTS server rate-limits or drops the connection, the bot gracefully falls back to the browser's native `SpeechSynthesis` API.
@@ -21,7 +21,7 @@ The system is specifically designed to run on a **Free API tier**, implementing 
 
 ## 🛠️ Free-Tier Optimization Design
 
-To operate robustly on Gemini's and Edge-TTS's free quotas, this voicebot integrates the following architectural optimizations:
+To operate robustly on Groq's and Edge-TTS's free quotas, this voicebot integrates the following architectural optimizations:
 1.  **Response Caching:** Repeats of identical queries (e.g., clicking *"Tell me about yourself"* multiple times) are served instantly from `api_cache.json`, causing 0 API cost.
 2.  **Sentence-Level Concurrency:** Instead of sending massive paragraphs to `edge-tts` (which frequently times out on connections under 25s), the text is parsed into sentences and retrieved concurrently. This drops latency from **15.3s to 3.8s** and preserves connection stability.
 3.  **Client-Side Fallbacks:** Falls back to local browser engines for text-to-speech if the remote TTS service fails, avoiding application crashes.
@@ -85,13 +85,12 @@ copy .env.example .env
 # macOS/Linux
 cp .env.example .env
 ```
-Open `.env` and configure your API key. (Get your free key from [Google AI Studio](https://aistudio.google.com)):
+Open `.env` and configure your Groq API key:
 ```ini
-# Gemini API Key
-GEMINI_API_KEY=AIzaSyYourGeminiApiKeyHere
-
-# Gemini Model configuration (Optional, defaults to gemini-1.5-flash)
-GEMINI_MODEL=gemini-1.5-flash
+# Groq API Configuration
+GROQ_API_KEY=your_groq_api_key_here
+GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_AUDIO_MODEL=whisper-large-v3-turbo
 ```
 
 ### 6. Run the Application
@@ -104,7 +103,7 @@ The app will automatically open in your browser at **http://localhost:8501** (or
 
 ## 🛑 Current Limitations
 
-*   **Free Quota Limits:** Excessive rapid queries may trigger a temporary `429 Resource Exhausted` rate-limit from Google Gemini's free tier. 
+*   **Free Quota Limits:** Excessive rapid queries may trigger a temporary rate-limit from Groq's free tier. 
 *   **Browser Autoplay Blocks:** Many modern browsers block audio autoplay on initial page load until the user interacts with the document (e.g. clicking anywhere on the screen). 
 *   **Browser Voice Quality:** The browser fallback TTS depends on the operating system's built-in text-to-speech voice pack, which may sound robotic compared to the Edge Neural voice.
 *   **Single-Session Storage:** Streamlit's chat history is kept in session state memory and will reset if the page is reloaded.
@@ -116,4 +115,4 @@ The app will automatically open in your browser at **http://localhost:8501** (or
 *   **Persistent Sessions:** Save chat history and usage metrics in a lightweight database (e.g., Supabase or SQLite).
 *   **Custom Voice Clone:** Train a custom voice model (using ElevenLabs or Coqui) to match Afrid's exact speaking voice.
 *   **Dynamic Document RAG:** Integrate a parser to allow users to scan or upload an updated resume PDF to dynamically update the bot's factual knowledge base.
-*   **Session Rate-Limiting:** Implement visual client-side cooldown timers to prevent users from spamming the free Gemini API key.
+*   **Session Rate-Limiting:** Implement visual client-side cooldown timers to prevent users from spamming the free Groq API key.

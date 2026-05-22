@@ -1,76 +1,71 @@
 import os
 import time
-from google import genai
-from google.genai import types
 from dotenv import load_dotenv
+from groq import Groq
 from utils.prompt import SYSTEM_PROMPT
 from utils.logger import logger
 from utils.cache import get_cached_response, set_cached_response
 
 def _get_client_and_model():
     """
-    Force reload the .env file and return a fresh genai.Client and the model name.
-    This ensures that edits to the .env file are applied instantly without restarting Streamlit.
+    Force reload the .env file and return a fresh Groq client and model name.
     """
     load_dotenv(override=True)
-    model = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
-    api_key = os.environ.get("GEMINI_API_KEY")
-    client = genai.Client(api_key=api_key)
+    groq_key = os.environ.get("GROQ_API_KEY")
+    model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+    client = Groq(api_key=groq_key)
     return client, model
+
+
+def get_active_provider_name() -> str:
+    """
+    Returns a user-friendly string representing the active Groq model.
+    """
+    _, model = _get_client_and_model()
+    return f"Groq ({model})"
 
 
 def get_response(conversation_history: list[dict]) -> str:
     """
-    Non-streaming call. Returns the complete response string.
-    Checks cache first; caches new responses.
+    Send conversation history to Groq and return the assistant's reply.
+    Checks cache first.
     """
     cached = get_cached_response(conversation_history)
     if cached is not None:
         return cached
 
     client, model = _get_client_and_model()
+    logger.info(f"Groq LLM request | model={model} | context={len(conversation_history)} msgs")
 
-    # Map conversation history roles from 'assistant' to Gemini's expected 'model' role
-    contents = []
+    # Format conversation history for Groq (System message first, then user/assistant turns)
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     for msg in conversation_history:
-        role = "model" if msg["role"] == "assistant" else "user"
-        contents.append(
-            types.Content(
-                role=role,
-                parts=[types.Part.from_text(text=msg["content"])]
-            )
-        )
-
-    logger.info(f"LLM request | model={model} | context={len(conversation_history)} msgs")
+        messages.append({"role": msg["role"], "content": msg["content"]})
 
     start = time.time()
     try:
-        response = client.models.generate_content(
+        response = client.chat.completions.create(
             model=model,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
-                temperature=0.6,
-                max_output_tokens=512,
-            )
+            messages=messages,
+            temperature=0.6,
+            max_tokens=512,
         )
-        reply = response.text.strip() if response.text else ""
+        reply = response.choices[0].message.content.strip()
         elapsed = time.time() - start
-        logger.info(f"LLM done | {elapsed:.2f}s | {len(reply)} chars")
+        logger.info(f"Groq LLM done | {elapsed:.2f}s | {len(reply)} chars")
         if reply:
             set_cached_response(conversation_history, reply)
         return reply
     except Exception as e:
         elapsed = time.time() - start
-        logger.error(f"LLM error after {elapsed:.2f}s: {e}")
-        return f"[Error reaching AI: {e}]"
+        logger.error(f"Groq LLM error after {elapsed:.2f}s: {e}")
+        return f"[Error reaching Groq: {e}]"
 
 
 def get_response_stream(conversation_history: list[dict]):
     """
     Streaming generator — yields text chunks for use with st.write_stream().
-    Cache hit → yields full cached response as a single chunk (instant).
-    Cache miss → streams tokens from Gemini, then caches the full reply.
+    Checks cache first.
     """
     cached = get_cached_response(conversation_history)
     if cached is not None:
@@ -79,85 +74,58 @@ def get_response_stream(conversation_history: list[dict]):
         return
 
     client, model = _get_client_and_model()
+    logger.info(f"Streaming Groq LLM request | model={model} | context={len(conversation_history)} msgs")
 
-    # Map conversation history roles from 'assistant' to Gemini's expected 'model' role
-    contents = []
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     for msg in conversation_history:
-        role = "model" if msg["role"] == "assistant" else "user"
-        contents.append(
-            types.Content(
-                role=role,
-                parts=[types.Part.from_text(text=msg["content"])]
-            )
-        )
-
-    logger.info(f"Streaming LLM request | model={model} | context={len(conversation_history)} msgs")
+        messages.append({"role": msg["role"], "content": msg["content"]})
 
     start = time.time()
     full_reply = ""
     try:
-        response_stream = client.models.generate_content_stream(
+        response_stream = client.chat.completions.create(
             model=model,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
-                temperature=0.6,
-                max_output_tokens=512,
-            )
+            messages=messages,
+            temperature=0.6,
+            max_tokens=512,
+            stream=True
         )
         for chunk in response_stream:
-            content = chunk.text
+            content = chunk.choices[0].delta.content
             if content:
                 full_reply += content
                 yield content
 
         elapsed = time.time() - start
-        logger.info(f"Streaming done | {elapsed:.2f}s | {len(full_reply)} chars")
+        logger.info(f"Streaming Groq done | {elapsed:.2f}s | {len(full_reply)} chars")
         if full_reply:
             set_cached_response(conversation_history, full_reply)
 
     except Exception as e:
         elapsed = time.time() - start
-        logger.error(f"Streaming error after {elapsed:.2f}s: {e}")
-        yield f"[Error reaching AI: {e}]"
+        logger.error(f"Streaming Groq error after {elapsed:.2f}s: {e}")
+        yield f"[Error reaching Groq: {e}]"
 
 
 def transcribe_audio(audio_bytes: bytes, filename: str = "audio.webm") -> str:
     """
-    Transcribe audio bytes to text using Gemini's native multimodal audio capabilities.
-    Returns the transcript string, or "" on failure.
+    Transcribe audio bytes to text using Groq's Whisper endpoint.
     """
-    logger.info(f"Transcribing {len(audio_bytes):,} bytes of audio ({filename})…")
+    logger.info(f"Transcribing {len(audio_bytes):,} bytes of audio ({filename}) using Groq Whisper…")
     
-    # Map extensions to supported audio mime-types
-    mime_type = "audio/webm"
-    if filename.endswith(".mp3"):
-        mime_type = "audio/mp3"
-    elif filename.endswith(".wav"):
-        mime_type = "audio/wav"
-    elif filename.endswith(".ogg"):
-        mime_type = "audio/ogg"
-    elif filename.endswith(".m4a"):
-        mime_type = "audio/m4a"
-
-    client, model = _get_client_and_model()
+    client, _ = _get_client_and_model()
+    model = os.environ.get("GROQ_AUDIO_MODEL", "whisper-large-v3-turbo")
 
     try:
         start = time.time()
-        response = client.models.generate_content(
-            model=model,
-            contents=[
-                types.Part.from_bytes(
-                    data=audio_bytes,
-                    mime_type=mime_type,
-                ),
-                "Transcribe the spoken audio exactly. Do not add metadata, comments, or explanations. If there is no speech, return an empty string."
-            ]
+        transcription = client.audio.transcriptions.create(
+            file=(filename, audio_bytes),
+            model=model
         )
-        text = response.text.strip() if response.text else ""
+        text = transcription.text.strip()
         elapsed = time.time() - start
-        logger.info(f"Transcription succeeded in {elapsed:.2f}s: '{text}'")
+        logger.info(f"Groq Whisper transcription succeeded in {elapsed:.2f}s: '{text}'")
         return text
     except Exception as e:
-        logger.error(f"Transcription error: {e}")
+        logger.error(f"Groq Whisper transcription error: {e}")
         return ""
