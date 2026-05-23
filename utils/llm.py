@@ -69,8 +69,12 @@ def get_response_stream(conversation_history: list[dict]):
     """
     cached = get_cached_response(conversation_history)
     if cached is not None:
-        logger.info("Cache HIT — returning instantly via stream.")
-        yield cached
+        logger.info("Cache HIT — returning via simulated stream.")
+        # Split by words to simulate typewriter/streaming effect
+        words = cached.split(" ")
+        for i, word in enumerate(words):
+            yield word + (" " if i < len(words) - 1 else "")
+            time.sleep(0.012)
         return
 
     client, model = _get_client_and_model()

@@ -225,7 +225,6 @@ div[data-testid="stHorizontalBlock"] .stButton > button:hover {
     background: rgba(99,102,241,0.07) !important;
     border: 1px solid rgba(99,102,241,0.2) !important;
     border-radius: 14px !important;
-    padding: 0.5rem 1rem !important;
 }
 
 /* ── Text input area ── */
