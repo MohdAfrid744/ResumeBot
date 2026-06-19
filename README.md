@@ -4,7 +4,7 @@ An interactive, high-fidelity portfolio voicebot for **Mohd Afrid** (AI/ML Engin
 
 The system is specifically designed to run on a **Free API tier**, implementing advanced local caching and concurrent network optimizations to remain highly responsive and budget-friendly.
 
-**🔗 Live Demo:** [Deployed on Streamlit Cloud](https://assessment-recommendation-tool-b9wzb3rngfkvts5qbrcll8.streamlit.app/)
+**🔗 Live Demo:** [Deployed on Streamlit Cloud](https://interactive-resume-voicebot.streamlit.app/)
 
 ---
 
